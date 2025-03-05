@@ -1,374 +1,289 @@
 <template>
-  <div class="chofer-component">
-    <!-- Vista de listado -->
-    <div v-if="currentView === 'list'">
-      <div class="header">
-        <h2>Listado de Choferes</h2>
-        <button class="btn btn-add" @click="goToCreate">Agregar Chofer</button>
-      </div>
+  <div class="container">
+    <h1>Gestión de Choferes</h1>
 
-      <!-- Buscador por Nombre -->
-      <div class="search-box">
-        <label for="search">Buscar por Nombre:</label>
-        <input type="text" id="search" v-model="searchQuery" placeholder="Ingrese nombre" />
-      </div>
-
-      <!-- Control de registros a mostrar -->
-      <div class="records-control">
-        <label for="recordsSelect">Mostrar registros:</label>
-        <select id="recordsSelect" v-model="recordsToShow">
-          <option value="5">5</option>
-          <option value="10">10</option>
-          <option value="todos">Todos</option>
-        </select>
-      </div>
-
-      <table class="chofer-table">
-        <thead>
-          <tr>
-            <th>ID</th>
-            <th>Nombre</th>
-            <th>DNI</th>
-            <th>Teléfono</th>
-            <th>Licencia de Conducir</th>
-            <th>Fecha de Contratación</th>
-            <th>Acciones</th>
-          </tr>
-        </thead>
-        <tbody>
-          <tr v-for="(chofer, index) in displayedChoferes" :key="chofer.id">
-            <td>{{ chofer.id }}</td>
-            <td>{{ chofer.nombre }}</td>
-            <td>{{ chofer.dni }}</td>
-            <td>{{ chofer.telefono }}</td>
-            <td>{{ chofer.licencia }}</td>
-            <td>{{ chofer.fecha_contratacion }}</td>
-            <td class="actions">
-              <button class="btn btn-edit" @click="goToEdit(index)">Editar</button>
-              <button class="btn btn-delete" @click="confirmDelete(index)">Eliminar</button>
-            </td>
-          </tr>
-        </tbody>
-      </table>
+    <!-- Opciones de Visualización -->
+    <div class="options-container">
+      <label>Mostrar:</label>
+      <select v-model="itemsPorPagina">
+        <option value="5">5</option>
+        <option value="todos">Todos</option>
+      </select>
+      <input v-model="busquedaId" type="number" placeholder="Buscar por ID" />
+      <button class="btn btn-primary" @click="buscarChofer">Buscar</button>
+      <button class="btn btn-secondary" @click="cargarChoferes">Mostrar Todos</button>
     </div>
 
-    <!-- Formulario de creación/edición -->
-    <div v-else class="form-view">
-      <h2>{{ editIndex !== null ? "Editar Chofer" : "Agregar Chofer" }}</h2>
-      <form @submit.prevent="saveChofer" class="chofer-form">
+    <!-- Botón Agregar Chofer -->
+    <button class="btn btn-success" @click="abrirModalAgregar">Agregar Chofer</button>
+
+    <!-- Tabla de Choferes -->
+    <table class="table">
+      <thead>
+        <tr>
+          <th>ID</th>
+          <th>Empresa</th>
+          <th>Nombre</th>
+          <th>DNI</th>
+          <th>Teléfono</th>
+          <th>Licencia</th>
+          <th>Fecha de Contratación</th>
+          <th>Acciones</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr v-for="chofer in choferesPaginados" :key="chofer.id_chofer">
+          <td>{{ chofer.id_chofer }}</td>
+          <td>{{ obtenerNombreEmpresa(chofer.id_empresa) }}</td>
+          <td>{{ chofer.nombre }}</td>
+          <td>{{ chofer.dni }}</td>
+          <td>{{ chofer.telefono }}</td>
+          <td>{{ chofer.licencia_conducir }}</td>
+          <td>{{ chofer.fecha_contratacion }}</td>
+          <td>
+            <button class="btn btn-warning" @click="editarChofer(chofer)">Editar</button>
+            <button class="btn btn-danger" @click="eliminarChofer(chofer.id_chofer)">Eliminar</button>
+          </td>
+        </tr>
+      </tbody>
+    </table>
+
+    <!-- Modal Agregar/Edit Chofer -->
+    <div v-if="mostrarModal" class="modal">
+      <div class="modal-content">
+        <h2>{{ esEdicion ? 'Editar Chofer' : 'Agregar Chofer' }}</h2>
+
         <div class="form-group">
-          <label>ID Chofer:</label>
-          <input type="text" v-model="currentChofer.id" class="small-input" disabled />
+          <label>Empresa:</label>
+          <select v-model="choferFormulario.id_empresa" required>
+            <option disabled value="">Seleccione una empresa</option>
+            <option v-for="empresa in empresas" :key="empresa.id_empresa" :value="empresa.id_empresa">
+              {{ empresa.nombre_empresa }}
+            </option>
+          </select>
         </div>
+
         <div class="form-group">
           <label>Nombre:</label>
-          <input type="text" v-model="currentChofer.nombre" class="small-input" @input="validateNombre" placeholder="Ingrese Nombre" required />
+          <input v-model="choferFormulario.nombre" type="text" @input="validarNombre" required />
         </div>
+
         <div class="form-group">
           <label>DNI:</label>
-          <input type="text" v-model="currentChofer.dni" class="small-input" maxlength="12" @input="validateDNI" placeholder="Ingrese DNI (12 dígitos)" required />
+          <input v-model="choferFormulario.dni" type="text" @input="validarDNI" required />
         </div>
+
         <div class="form-group">
           <label>Teléfono:</label>
-          <input type="text" v-model="currentChofer.telefono" class="small-input" maxlength="8" @input="validateTelefono" placeholder="Ingrese Teléfono (8 dígitos)" required />
+          <input v-model="choferFormulario.telefono" type="text" @input="validarTelefono" required />
         </div>
+
         <div class="form-group">
           <label>Licencia de Conducir:</label>
-          <input type="text" v-model="currentChofer.licencia" class="small-input" maxlength="8" @input="validateLicencia" placeholder="Ingrese Licencia (8 dígitos)" required />
+          <input v-model="choferFormulario.licencia_conducir" type="text" required />
         </div>
+
         <div class="form-group">
           <label>Fecha de Contratación:</label>
-          <input type="date" v-model="currentChofer.fecha_contratacion" class="small-input" required />
+          <input v-model="choferFormulario.fecha_contratacion" type="date" required />
         </div>
-        <div class="form-actions">
-          <button type="submit" class="btn btn-save">{{ editIndex !== null ? "Actualizar" : "Guardar" }}</button>
-          <button type="button" class="btn btn-cancel" @click="goToList">Cancelar</button>
-        </div>
-      </form>
-    </div>
 
-    <!-- Modal de Confirmación para Eliminar -->
-    <div v-if="showDeleteModal" class="modal-overlay">
-      <div class="modal">
-        <p>¿Estás seguro que deseas eliminar este chofer?</p>
-        <div class="modal-actions">
-          <button @click="deleteChofer" class="btn btn-confirm">Sí</button>
-          <button @click="showDeleteModal = false" class="btn btn-cancel">No</button>
+        <div class="button-group">
+          <button class="btn btn-success" @click="guardarChofer">Guardar</button>
+          <button class="btn btn-secondary" @click="cerrarModal">Cancelar</button>
         </div>
       </div>
-    </div>
-
-    <!-- Modal de Éxito en la parte superior derecha -->
-    <div v-if="showSuccessModal" class="modal-success">
-      <p>{{ successMessage }}</p>
     </div>
   </div>
 </template>
 
 <script>
+import axios from "axios";
+
 export default {
-  name: "ChoferComponent",
   data() {
     return {
-      currentView: "list",
-      choferes: JSON.parse(localStorage.getItem("choferes")) || [],
-      recordsToShow: "5",
-      searchQuery: "",
-      showSuccessModal: false,
-      successMessage: "",
-      showDeleteModal: false,
-      deleteIndex: null,
-      currentChofer: { id: 1, nombre: "", dni: "", telefono: "", licencia: "", fecha_contratacion: "" },
-      editIndex: null
+      choferes: [],
+      empresas: [],
+      busquedaId: "",
+      mostrarModal: false,
+      esEdicion: false,
+      choferFormulario: { id_empresa: "", nombre: "", dni: "", telefono: "", licencia_conducir: "", fecha_contratacion: "" },
+      itemsPorPagina: "5",
     };
   },
   computed: {
-    displayedChoferes() {
-      return this.recordsToShow === "todos" ? this.choferes : this.choferes.slice(0, Number(this.recordsToShow));
-    }
+    choferesPaginados() {
+      return this.itemsPorPagina === "todos" ? this.choferes : this.choferes.slice(0, Number(this.itemsPorPagina));
+    },
   },
   methods: {
-    generateChoferId() {
-      return this.choferes.length > 0 ? Math.max(...this.choferes.map(c => c.id)) + 1 : 1;
+    validarNombre() {
+      this.choferFormulario.nombre = this.choferFormulario.nombre.replace(/[^a-zA-ZÁÉÍÓÚáéíóúñÑ\s]/g, "");
     },
-    validateNombre() {
-      this.currentChofer.nombre = this.currentChofer.nombre.replace(/\d/g, '');
+    validarDNI() {
+      this.choferFormulario.dni = this.choferFormulario.dni.replace(/\D/g, "").slice(0, 13);
     },
-    validateDNI() {
-      this.currentChofer.dni = this.currentChofer.dni.replace(/\D/g, '');
+    validarTelefono() {
+      this.choferFormulario.telefono = this.choferFormulario.telefono.replace(/\D/g, "").slice(0, 8);
     },
-    validateTelefono() {
-      this.currentChofer.telefono = this.currentChofer.telefono.replace(/\D/g, '');
-    },
-    validateLicencia() {
-      this.currentChofer.licencia = this.currentChofer.licencia.replace(/\D/g, '');
-    },
-    saveChofer() {
-      if (this.editIndex !== null) {
-        this.choferes.splice(this.editIndex, 1, { ...this.currentChofer });
-      } else {
-        this.currentChofer.id = this.generateChoferId();
-        this.choferes.push({ ...this.currentChofer });
+    async cargarChoferes() {
+      try {
+        const response = await axios.get("http://localhost:3001/choferes");
+        this.choferes = response.data || [];
+      } catch (error) {
+        alert("Error al cargar los choferes.");
       }
-      localStorage.setItem("choferes", JSON.stringify(this.choferes));
-      this.showSuccessModal = true;
-      setTimeout(() => (this.showSuccessModal = false), 3000);
-      this.resetCurrentChofer();
-      this.currentView = "list";
     },
-    confirmDelete(index) {
-      this.deleteIndex = index;
-      this.showDeleteModal = true;
+    async cargarEmpresas() {
+      try {
+        const response = await axios.get("http://localhost:3001/empresas");
+        this.empresas = response.data || [];
+      } catch (error) {
+        alert("Error al cargar las empresas.");
+      }
     },
-    deleteChofer() {
-      this.choferes.splice(this.deleteIndex, 1);
-      localStorage.setItem("choferes", JSON.stringify(this.choferes));
-      this.showDeleteModal = false;
+    obtenerNombreEmpresa(idEmpresa) {
+      const empresa = this.empresas.find(emp => emp.id_empresa === idEmpresa);
+      return empresa ? empresa.nombre_empresa : "Desconocido";
     },
-    goToCreate() {
-      this.resetCurrentChofer();
-      this.currentView = "create";
+    async buscarChofer() {
+      if (!this.busquedaId) {
+        alert("Ingrese un ID válido");
+        return;
+      }
+      try {
+        const response = await axios.get(`http://localhost:3001/choferes/${this.busquedaId}`);
+        this.choferes = [response.data];
+      } catch (error) {
+        alert("Chofer no encontrado");
+      }
     },
-    goToEdit(index) {
-      this.editIndex = index;
-      this.currentChofer = { ...this.choferes[index] };
-      this.currentView = "create";
+    async eliminarChofer(id) {
+      if (!confirm("¿Estás seguro de eliminar este chofer?")) return;
+      try {
+        await axios.delete(`http://localhost:3001/choferes/${id}`);
+        alert("Chofer eliminado correctamente");
+        this.cargarChoferes();
+      } catch (error) {
+        alert("Error al eliminar chofer.");
+      }
     },
-    goToList() {
-      this.currentView = "list";
+    abrirModalAgregar() {
+      this.choferFormulario = { id_empresa: "", nombre: "", dni: "", telefono: "", licencia_conducir: "", fecha_contratacion: "" };
+      this.esEdicion = false;
+      this.mostrarModal = true;
     },
-    resetCurrentChofer() {
-      this.currentChofer = { id: this.generateChoferId(), nombre: "", dni: "", telefono: "", licencia: "", fecha_contratacion: "" };
-      this.editIndex = null;
+    editarChofer(chofer) {
+      this.choferFormulario = { ...chofer };
+      this.esEdicion = true;
+      this.mostrarModal = true;
+    },
+    async guardarChofer() {
+      try {
+        if (this.esEdicion) {
+          await axios.put(`http://localhost:3001/choferes/${this.choferFormulario.id_chofer}`, this.choferFormulario);
+          alert("Chofer actualizado correctamente.");
+        } else {
+          await axios.post("http://localhost:3001/choferes", this.choferFormulario);
+          alert("Chofer agregado correctamente.");
+        }
+        this.cerrarModal();
+        this.cargarChoferes();
+      } catch (error) {
+        alert("Error al guardar el chofer.");
+      }
+    },
+    cerrarModal() {
+      this.mostrarModal = false;
     }
+  },
+  mounted() {
+    this.cargarChoferes();
+    this.cargarEmpresas();
   }
 };
 </script>
 
 
 
-
-<style scoped>
-.chofer-component {
+<style>
+.container {
   max-width: 900px;
-  margin: 0 auto;
-  padding: 20px;
-  font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-  color: #333;
+  margin: auto;
+  font-family: Arial, sans-serif;
 }
-.header {
+h1 {
+  text-align: center;
+  margin-bottom: 20px;
+}
+.options-container {
   display: flex;
-  justify-content: space-between;
-  align-items: center;
+  gap: 10px;
   margin-bottom: 15px;
 }
-.header h2 {
-  flex: 1;
-  text-align: center;
-  margin: 0;
-}
-.search-box {
-  margin-bottom: 10px;
-  text-align: center;
-}
-.search-box input {
-  width: 300px;
-  padding: 8px;
-  border: 1px solid #ccc;
-  border-radius: 4px;
-}
-.records-control {
-  margin-bottom: 10px;
-  display: flex;
-  justify-content: center;
-  align-items: center;
-  gap: 10px;
-}
-.records-control label {
-  font-weight: bold;
-}
-.chofer-table {
+.table {
   width: 100%;
-  margin: 0 auto;
   border-collapse: collapse;
-  table-layout: auto;
+  background: white;
 }
-.chofer-table th,
-.chofer-table td {
+th, td {
   border: 1px solid #ddd;
-  padding: 10px;
-  text-align: center;
-  vertical-align: middle;
-}
-.chofer-table th {
-  background-color: #f2f2f2;
-}
-.chofer-table tbody tr:hover {
-  background-color: #e8f4fc;
-}
-
-.actions {
-  display: flex;
-  justify-content: center;
-  align-items: center;
-  gap: 10px;
-  min-width: 150px; /* Fija un ancho mínimo para que se adapte a los demás campos */
-}
-.form-view {
-  margin-top: 20px;
-}
-.chofer-form {
-  background: #f9f9f9;
-  padding: 15px;
-  border-radius: 8px;
-  box-shadow: 0 2px 8px rgba(0,0,0,0.1);
-}
-.form-group {
-  margin-bottom: 10px;
-}
-.form-group label {
-  display: block;
-  font-weight: bold;
-  margin-bottom: 5px;
-}
-.small-input {
-  width: 250px;
   padding: 8px;
-  border: 1px solid #ccc;
-  border-radius: 4px;
-  box-sizing: border-box;
+  text-align: center;
+}
+th {
+  background: #007bff;
+  color: white;
+  padding: 12px; /* Aumenta el padding para que el encabezado sea más ancho */
+  min-width: 100px; /* Establece un ancho mínimo para las celdas del encabezado */
+}
+.fila-seleccionada {
+  background: #d1ecf1 !important;
 }
 
-.form-actions {
-  margin-top: 15px;
-  display: flex;
-  gap: 10px;
+/* Estilo para el hover en las filas de la tabla */
+.table tbody tr:hover {
+  background-color: #f5f5f5; /* Cambia el color de fondo al pasar el cursor */
+  cursor: pointer; /* Cambia el cursor a una mano */
 }
-.btn {
-  padding: 8px 12px;
-  border: none;
-  border-radius: 4px;
-  cursor: pointer;
-  transition: background 0.3s;
-}
-.btn-add {
-  background-color: #28a745;
-  color: #fff;
-}
-.btn-add:hover {
-  background-color: #218838;
-}
-.btn-edit {
-  background-color: #007bff;
-  color: #fff;
-}
-.btn-edit:hover {
-  background-color: #0069d9;
-}
-.btn-delete {
-  background-color: #dc3545;
-  color: #fff;
-}
-.btn-delete:hover {
-  background-color: #c82333;
-}
-.btn-save {
-  background-color: #28a745;
-  color: #fff;
-}
-.btn-save:hover {
-  background-color: #218838;
-}
-.btn-cancel,
-.btn-close {
-  background-color: #6c757d;
-  color: #fff;
-}
-.btn-cancel:hover,
-.btn-close:hover {
-  background-color: #5a6268;
-}
-.modal-overlay {
-  position: fixed;
-  top: 0;
-  left: 0;
-  right: 0;
-  bottom: 0;
-  background: rgba(0,0,0,0.5);
-  display: flex;
-  justify-content: center;
-  align-items: center;
-  z-index: 1000;
-}
-.modal {
-  background: #fff;
+
+/* Modal */
+.modal-content {
+  background: white;
   padding: 20px;
   border-radius: 8px;
-  width: 300px;
   text-align: center;
-  box-shadow: 0 2px 10px rgba(0,0,0,0.2);
+  width: 300px;
 }
-.modal-actions {
+.form-group {
   display: flex;
-  justify-content: space-around;
-  margin-top: 15px;
+  flex-direction: column;
+  margin-bottom: 15px;
+  text-align: left;
 }
-.modal-success {
-  position: fixed;
-  top: 20px;
-  right: 20px;
-  background: #28a745;
-  color: #fff;
-  padding: 15px 20px;
-  border-radius: 8px;
-  box-shadow: 0 2px 10px rgba(0,0,0,0.2);
-  z-index: 1100;
-  animation: fadeInOut 3s ease forwards;
+.button-group {
+  display: flex;
+  justify-content: space-between;
+  margin-top: 20px;
 }
-@keyframes fadeInOut {
-  0% { opacity: 0; transform: translateY(-20px); }
-  10% { opacity: 1; transform: translateY(0); }
-  90% { opacity: 1; transform: translateY(0); }
-  100% { opacity: 0; transform: translateY(-20px); }
+
+/* Botones */
+.btn {
+  padding: 8px 12px;
+  border-radius: 5px;
+  cursor: pointer;
+}
+.btn-primary { background: #007bff; color: white; }
+.btn-secondary { background: #6c757d; color: white; }
+.btn-success { background: #28a745; color: white; }
+.btn-warning { background: #ffc107; color: black; }
+.btn-danger { background: #dc3545; color: white; }
+
+/* Contenedor de botones en la tabla */
+.button-container {
+  display: flex;
+  gap: 5px;
+  justify-content: center;
 }
 </style>
