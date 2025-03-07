@@ -39,6 +39,7 @@
     { path: "/horarios", label: "Horarios", icon: "fas fa-clock" },
     { path: "/transacciones", label: "Transacciones", icon: "fas fa-money-bill-wave" },
     { path: "/empresas", label: "Empresas", icon: "fas fa-building" }
+    
   ];
   </script>
   
