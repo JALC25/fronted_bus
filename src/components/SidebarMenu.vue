@@ -38,8 +38,8 @@
     { path: "/rutas", label: "Rutas", icon: "fas fa-map-marked-alt" },
     { path: "/horarios", label: "Horarios", icon: "fas fa-clock" },
     { path: "/transacciones", label: "Transacciones", icon: "fas fa-money-bill-wave" },
-    { path: "/empresas", label: "Empresas", icon: "fas fa-building" }
-    
+    { path: "/empresas", label: "Empresas", icon: "fas fa-building" },
+    { path: "/asientos", label: "Asientos", icon: "fas fa-chair" }
   ];
   </script>
   

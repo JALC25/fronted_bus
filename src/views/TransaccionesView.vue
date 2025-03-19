@@ -1,489 +1,381 @@
 <template>
-  <div class="transaccion-component">
-    <!-- Vista de listado -->
-    <div v-if="currentView === 'list'">
-      <div class="header">
-        <h2>Listado de Transacciones</h2>
-        <button class="btn btn-add" @click="goToCreate">Agregar Transacción</button>
-      </div>
+  <div class="container">
+    <h1>Gestión de Transacciones</h1>
 
-      <!-- Buscador por ID de Transacción -->
-      <div class="search-box">
-        <label for="search">Buscar por ID de Transacción:</label>
-        <input type="text" id="search" v-model="searchQuery" placeholder="Ingrese ID de Transacción" />
-      </div>
+    <!-- Opciones de Visualización -->
+    <div class="options-container">
+      <label>Mostrar:</label>
+      <select v-model="itemsPorPagina">
+        <option value="5">5</option>
+        <option value="todos">Todos</option>
+      </select>
+      <input v-model="busquedaId" type="number" placeholder="Buscar por ID" />
+      <button class="btn btn-primary" @click="buscarTransaccion">Buscar</button>
+      <button class="btn btn-secondary" @click="cargarDatos">Mostrar Todos</button>
+    </div>
 
-      <!-- Control de registros a mostrar -->
-      <div class="records-control">
-        <label for="recordsSelect">Mostrar registros:</label>
-        <select id="recordsSelect" v-model="recordsToShow">
-          <option value="5">5</option>
-          <option value="10">10</option>
-          <option value="todos">Todos</option>
-        </select>
-      </div>
+    <!-- Botón Agregar Transacción -->
+    <button class="btn btn-success" @click="abrirModal(false)">Agregar Transacción</button>
 
-      <table class="transaccion-table">
+    <!-- Tabla de Transacciones -->
+    <div class="table-responsive">
+      <table class="table">
         <thead>
           <tr>
-            <th>ID Transacción</th>
-            <th>ID Horario</th>
-            <th>ID Cliente</th>
+            <th>ID</th>
+            <th>Horario</th>
+            <th>Cliente</th>
+            <th>Bus</th>
+            <th>Ruta</th>
             <th>Asiento</th>
             <th>Precio</th>
             <th>Estado</th>
-            <th>Fecha de Compra</th>
-            <th>Método de Pago</th>
+            <th>Fecha Compra</th>
+            <th>Método Pago</th>
+            <th>Código Ticket</th>
             <th>Acciones</th>
           </tr>
         </thead>
         <tbody>
-          <tr v-for="(transaccion, index) in displayedTransacciones" :key="transaccion.idTransaccion">
-            <td>{{ transaccion.idTransaccion }}</td>
-            <td>{{ transaccion.idHorario }}</td>
-            <td>{{ transaccion.idCliente }}</td>
-            <td>{{ transaccion.asiento }}</td>
+          <tr v-for="transaccion in transaccionesFiltradas" :key="transaccion.id_transaccion">
+            <td>{{ transaccion.id_transaccion }}</td>
+            <td>{{ transaccion.Horario?.fecha_salida || "No asignado" }}</td>
+            <td>{{ transaccion.Cliente?.nombre_completo || "Sin cliente" }}</td>
+            <td>{{ transaccion.Bus?.placa || "No asignado" }}</td>
+            <td>{{ transaccion.Ruta?.origen || "No asignado" }}</td>
+            <td>{{ transaccion.Asiento?.numero_asiento || "No asignado" }}</td>
             <td>{{ transaccion.precio }}</td>
             <td>{{ transaccion.estado }}</td>
-            <td>{{ transaccion.fechaCompra }}</td>
-            <td>{{ transaccion.metodoPago }}</td>
-            <td class="actions">
-              <button class="btn btn-edit" @click="goToEdit(index)">Editar</button>
-              <button class="btn btn-delete" @click="confirmDelete(index)">Eliminar</button>
-              <button class="btn btn-print" @click="imprimirTransaccion(transaccion)">Imprimir</button>
+            <td>{{ transaccion.fecha_compra }}</td>
+            <td>{{ transaccion.metodo_pago }}</td>
+            <td>{{ transaccion.codigo_ticket }}</td>
+            <td>
+              <button class="btn btn-warning" @click="abrirModal(true, transaccion)">Editar</button>
+              <button class="btn btn-danger" @click="eliminarTransaccion(transaccion.id_transaccion)">Eliminar</button>
+              <button class="btn btn-info" @click="imprimirTransaccion(transaccion)">Imprimir</button>
             </td>
           </tr>
         </tbody>
       </table>
     </div>
 
-    <!-- Formulario de creación/edición -->
-    <div v-else-if="currentView === 'create'" class="form-view">
-      <h2>{{ editIndex !== null ? "Editar Transacción" : "Agregar Transacción" }}</h2>
-      <form @submit.prevent="saveTransaccion" class="transaccion-form">
+    <!-- Modal Agregar/Editar Transacción -->
+    <div v-if="mostrarModal" class="modal">
+      <div class="modal-content" :class="{ 'modal-content-small': mostrarCamposTarjetaFlag }">
+        <h2>{{ esEdicion ? 'Editar Transacción' : 'Agregar Transacción' }}</h2>
+
+        <div v-if="mensajeError" class="error-message">{{ mensajeError }}</div>
+
+        <!-- Campos del formulario -->
         <div class="form-group">
-          <label for="idTransaccion">ID Transacción:</label>
-          <input type="text" id="idTransaccion" v-model="currentTransaccion.idTransaccion" class="small-input" disabled />
-        </div>
-        <div class="form-group">
-          <label for="idHorario">ID Horario:</label>
-          <input type="text" id="idHorario" v-model="currentTransaccion.idHorario" placeholder="Ingrese ID Horario" class="small-input" @input="validateNumber('idHorario')" />
-        </div>
-        <div class="form-group">
-          <label for="idCliente">ID Cliente:</label>
-          <input type="text" id="idCliente" v-model="currentTransaccion.idCliente" placeholder="Ingrese ID Cliente" class="small-input" @input="validateNumber('idCliente')" />
-        </div>
-        <div class="form-group">
-          <label for="asiento">Asiento:</label>
-          <input type="text" id="asiento" v-model="currentTransaccion.asiento" placeholder="Ingrese Asiento" class="small-input" @input="validateNumber('asiento')" />
-        </div>
-        <div class="form-group">
-          <label for="precio">Precio:</label>
-          <input type="text" id="precio" v-model="currentTransaccion.precio" placeholder="Ingrese Precio" class="small-input" @input="validateNumber('precio')" />
-        </div>
-        <div class="form-group">
-          <label for="estado">Estado:</label>
-          <select id="estado" v-model="currentTransaccion.estado" class="small-input">
-            <option value="pagado">Pagado</option>
-            <option value="reservado">Reservado</option>
-            <option value="cancelado">Cancelado</option>
+          <label>Horario:</label>
+          <select v-model="transaccionFormulario.id_horario">
+            <option value="" disabled>Seleccione un horario</option>
+            <option v-for="horario in horarios" :key="horario.id_horario" :value="horario.id_horario">
+              {{ horario.fecha_salida }}
+            </option>
           </select>
         </div>
+
         <div class="form-group">
-          <label for="fechaCompra">Fecha de Compra:</label>
-          <input type="date" id="fechaCompra" v-model="currentTransaccion.fechaCompra" class="small-input" />
-        </div>
-        <div class="form-group">
-          <label for="metodoPago">Método de Pago:</label>
-          <select id="metodoPago" v-model="currentTransaccion.metodoPago" class="small-input" @change="toggleTarjetaFields">
-            <option value="efectivo">Efectivo</option>
-            <option value="tarjeta">Tarjeta</option>
+          <label>Cliente:</label>
+          <select v-model="transaccionFormulario.id_cliente">
+            <option value="">Sin cliente asignado</option>
+            <option v-for="cliente in clientes" :key="cliente.id_cliente" :value="cliente.id_cliente">
+              {{ cliente.nombre_completo }}
+            </option>
           </select>
         </div>
-        <div v-if="currentTransaccion.metodoPago === 'tarjeta'" class="form-group">
-          <label for="numeroTarjeta">Número de Tarjeta:</label>
-          <input type="text" id="numeroTarjeta" v-model="currentTransaccion.numeroTarjeta" placeholder="Ingrese Número de Tarjeta" class="small-input" @input="validateTarjeta" maxlength="16" />
-        </div>
-        <div v-if="currentTransaccion.metodoPago === 'tarjeta'" class="form-group">
-          <label for="fechaExpiracion">Fecha de Expiración:</label>
-          <input type="text" id="fechaExpiracion" v-model="currentTransaccion.fechaExpiracion" placeholder="MM/YY" class="small-input" @input="validateFechaExpiracion" maxlength="4" />
-        </div>
-        <div v-if="currentTransaccion.metodoPago === 'tarjeta'" class="form-group">
-          <label for="cvv">CVV:</label>
-          <input type="text" id="cvv" v-model="currentTransaccion.cvv" placeholder="Ingrese CVV" class="small-input" @input="validateCVV" maxlength="3" />
-        </div>
-        <div class="form-actions">
-          <button type="submit" class="btn btn-save">{{ editIndex !== null ? "Actualizar" : "Guardar" }}</button>
-          <button type="button" class="btn btn-cancel" @click="goToList">Cancelar</button>
-        </div>
-      </form>
-    </div>
 
-    <!-- Modal de Error -->
-    <div v-if="showErrorModal" class="modal-overlay">
-      <div class="modal">
-        <p>{{ errorMessage }}</p>
-        <button @click="showErrorModal = false" class="btn btn-close">Cerrar</button>
+        <div class="form-group">
+          <label>Bus:</label>
+          <select v-model="transaccionFormulario.id_bus">
+            <option value="" disabled>Seleccione un bus</option>
+            <option v-for="autobus in autobuses" :key="autobus.id_bus" :value="autobus.id_bus">
+              {{ autobus.placa }}
+            </option>
+          </select>
+        </div>
+
+        <div class="form-group">
+          <label>Ruta:</label>
+          <select v-model="transaccionFormulario.id_ruta">
+            <option value="" disabled>Seleccione una ruta</option>
+            <option v-for="ruta in rutas" :key="ruta.id_ruta" :value="ruta.id_ruta">
+              {{ ruta.origen }}
+            </option>
+          </select>
+        </div>
+
+        <div class="form-group">
+          <label>Asiento:</label>
+          <select v-model="transaccionFormulario.id_asiento">
+            <option value="" disabled>Seleccione un asiento</option>
+            <option v-for="asiento in asientos" :key="asiento.id_asiento" :value="asiento.id_asiento">
+              {{ asiento.numero_asiento }}
+            </option>
+          </select>
+        </div>
+
+        <div class="form-group">
+          <label>Precio:</label>
+          <input v-model="transaccionFormulario.precio" type="number" />
+        </div>
+
+        <div class="form-group">
+          <label>Estado:</label>
+          <select v-model="transaccionFormulario.estado">
+            <option value="Reservado">Reservado</option>
+            <option value="Comprado">Comprado</option>
+            <option value="Cancelado">Cancelado</option>
+          </select>
+        </div>
+
+        <div class="form-group">
+          <label>Método de Pago:</label>
+          <select v-model="transaccionFormulario.metodo_pago" @change="mostrarCamposTarjeta">
+            <option value="Efectivo">Efectivo</option>
+            <option value="Tarjeta">Tarjeta</option>
+          </select>
+        </div>
+
+        <!-- Campos de la tarjeta (solo visibles si el método de pago es "Tarjeta") -->
+        <div v-if="mostrarCamposTarjetaFlag" class="form-group">
+          <label>Número de Tarjeta:</label>
+          <input v-model="transaccionFormulario.numero_tarjeta" type="text" placeholder="1234 5678 9012 3456" />
+        </div>
+
+        <div v-if="mostrarCamposTarjetaFlag" class="form-group">
+          <label>Nombre del Titular:</label>
+          <input v-model="transaccionFormulario.nombre_titular" type="text" placeholder="Juan Pérez" />
+        </div>
+
+        <div v-if="mostrarCamposTarjetaFlag" class="form-group">
+          <label>Fecha de Expiración:</label>
+          <input v-model="transaccionFormulario.fecha_expiracion" type="text" placeholder="MM/YY" />
+        </div>
+
+        <div v-if="mostrarCamposTarjetaFlag" class="form-group">
+          <label>CVV:</label>
+          <input v-model="transaccionFormulario.cvv" type="text" placeholder="123" />
+        </div>
+
+        <div class="button-group">
+          <button class="btn btn-success" @click="guardarTransaccion">Guardar</button>
+          <button class="btn btn-secondary" @click="cerrarModal">Cancelar</button>
+        </div>
       </div>
-    </div>
-
-    <!-- Modal de Confirmación para Eliminar -->
-    <div v-if="showDeleteModal" class="modal-overlay">
-      <div class="modal">
-        <p>¿Estás seguro que deseas eliminar esta transacción?</p>
-        <div class="modal-actions">
-          <button @click="deleteTransaccion" class="btn btn-confirm">Sí</button>
-          <button @click="showDeleteModal = false" class="btn btn-cancel">No</button>
-        </div>
-      </div>
-    </div>
-
-    <!-- Modal de Éxito en la parte superior derecha -->
-    <div v-if="showSuccessModal" class="modal-success">
-      <p>{{ successMessage }}</p>
     </div>
   </div>
 </template>
 
 <script>
+import axios from "axios";
+
 export default {
-  name: "TransaccionComponent",
   data() {
     return {
-      currentView: "list",
-      transacciones: JSON.parse(localStorage.getItem("transacciones")) || [],
-      recordsToShow: "5",
-      searchQuery: "",
-      showErrorModal: false,
-      errorMessage: "",
-      showSuccessModal: false,
-      successMessage: "",
-      showDeleteModal: false,
-      deleteIndex: null,
-      currentTransaccion: {
-        idTransaccion: 1,
-        idHorario: "",
-        idCliente: "",
-        asiento: "",
-        precio: "",
-        estado: "pagado",
-        fechaCompra: "",
-        metodoPago: "efectivo",
-        numeroTarjeta: "",
-        fechaExpiracion: "",
-        cvv: ""
+      transacciones: [],
+      horarios: [],
+      clientes: [],
+      autobuses: [],
+      rutas: [],
+      asientos: [],
+      mostrarModal: false,
+      esEdicion: false,
+      transaccionFormulario: {
+        metodo_pago: "Efectivo", // Valor por defecto
+        numero_tarjeta: "",
+        nombre_titular: "",
+        fecha_expiracion: "",
+        cvv: "",
       },
-      editIndex: null
+      mensajeError: "",
+      busquedaId: "",
+      itemsPorPagina: "5",
+      mostrarCamposTarjetaFlag: false, // Controla la visibilidad de los campos de la tarjeta
     };
   },
   computed: {
-    filteredTransacciones() {
-      if (!this.searchQuery.trim()) return this.transacciones;
-      return this.transacciones.filter(transaccion =>
-        transaccion.idTransaccion.toString().includes(this.searchQuery)
-      );
-    },
-    displayedTransacciones() {
-      if (this.recordsToShow === "todos") {
-        return this.filteredTransacciones;
+    transaccionesFiltradas() {
+      if (this.itemsPorPagina === "todos") {
+        return this.transacciones;
       } else {
-        return this.filteredTransacciones.slice(0, Number(this.recordsToShow));
+        const cantidad = parseInt(this.itemsPorPagina, 10);
+        return this.transacciones.slice(0, cantidad);
       }
-    }
+    },
   },
   methods: {
-    generateTransaccionId() {
-      return this.transacciones.length > 0 ? Math.max(...this.transacciones.map(t => t.idTransaccion)) + 1 : 1;
-    },
-    validateNumber(field) {
-      this.currentTransaccion[field] = this.currentTransaccion[field].replace(/\D/g, '');
-    },
-    validateTarjeta() {
-      this.currentTransaccion.numeroTarjeta = this.currentTransaccion.numeroTarjeta.replace(/\D/g, '');
-    },
-    validateFechaExpiracion() {
-      this.currentTransaccion.fechaExpiracion = this.currentTransaccion.fechaExpiracion.replace(/\D/g, '');
-    },
-    validateCVV() {
-      this.currentTransaccion.cvv = this.currentTransaccion.cvv.replace(/\D/g, '');
-    },
-    saveTransaccion() {
-      if (!this.currentTransaccion.idHorario || !this.currentTransaccion.idCliente || !this.currentTransaccion.asiento || !this.currentTransaccion.precio || !this.currentTransaccion.estado || !this.currentTransaccion.fechaCompra || !this.currentTransaccion.metodoPago) {
-        this.errorMessage = "Todos los campos son obligatorios.";
-        this.showErrorModal = true;
-        return;
+    async cargarDatos() {
+      try {
+        this.transacciones = (await axios.get("http://localhost:3001/transacciones")).data;
+        this.horarios = (await axios.get("http://localhost:3001/horarios")).data;
+        this.clientes = (await axios.get("http://localhost:3001/clientes")).data;
+        this.autobuses = (await axios.get("http://localhost:3001/api/autobuses")).data;
+        this.rutas = (await axios.get("http://localhost:3001/rutas")).data;
+        this.asientos = (await axios.get("http://localhost:3001/asientos")).data;
+      } catch (error) {
+        console.error("Error al cargar datos:", error);
       }
-
-      if (this.currentTransaccion.metodoPago === 'tarjeta' && (!this.currentTransaccion.numeroTarjeta || !this.currentTransaccion.fechaExpiracion || !this.currentTransaccion.cvv)) {
-        this.errorMessage = "Todos los campos de la tarjeta son obligatorios.";
-        this.showErrorModal = true;
-        return;
-      }
-
-      if (this.editIndex !== null) {
-        this.transacciones.splice(this.editIndex, 1, { ...this.currentTransaccion });
-        this.successMessage = "Transacción actualizada correctamente.";
-      } else {
-        this.currentTransaccion.idTransaccion = this.generateTransaccionId();
-        this.transacciones.push({ ...this.currentTransaccion });
-        this.successMessage = "Transacción agregada correctamente.";
-      }
-
-      localStorage.setItem("transacciones", JSON.stringify(this.transacciones));
-
-      this.showSuccessModal = true;
-      setTimeout(() => (this.showSuccessModal = false), 3000);
-      this.resetCurrentTransaccion();
-      this.currentView = "list";
     },
-    confirmDelete(index) {
-      this.deleteIndex = index;
-      this.showDeleteModal = true;
-    },
-    deleteTransaccion() {
-      if (this.deleteIndex !== null) {
-        this.transacciones.splice(this.deleteIndex, 1);
-        localStorage.setItem("transacciones", JSON.stringify(this.transacciones));
-      }
-      this.showDeleteModal = false;
-    },
-    goToCreate() {
-      this.resetCurrentTransaccion();
-      this.currentView = "create";
-    },
-    goToEdit(index) {
-      this.editIndex = index;
-      this.currentTransaccion = { ...this.transacciones[index] };
-      this.currentView = "create";
-    },
-    goToList() {
-      this.currentView = "list";
-    },
-    resetCurrentTransaccion() {
-      this.currentTransaccion = {
-        idTransaccion: this.generateTransaccionId(),
-        idHorario: "",
-        idCliente: "",
-        asiento: "",
-        precio: "",
-        estado: "pagado",
-        fechaCompra: "",
-        metodoPago: "efectivo",
-        numeroTarjeta: "",
-        fechaExpiracion: "",
-        cvv: ""
+    abrirModal(esEdicion, transaccion = null) {
+      this.mostrarModal = true;
+      this.esEdicion = esEdicion;
+      this.transaccionFormulario = transaccion ? { ...transaccion } : {
+        metodo_pago: "Efectivo",
+        numero_tarjeta: "",
+        nombre_titular: "",
+        fecha_expiracion: "",
+        cvv: "",
       };
-      this.editIndex = null;
+      this.mostrarCamposTarjetaFlag = this.transaccionFormulario.metodo_pago === "Tarjeta";
     },
-    toggleTarjetaFields() {
-      if (this.currentTransaccion.metodoPago !== 'tarjeta') {
-        this.currentTransaccion.numeroTarjeta = "";
-        this.currentTransaccion.fechaExpiracion = "";
-        this.currentTransaccion.cvv = "";
+    cerrarModal() {
+      this.mostrarModal = false;
+      this.mensajeError = "";
+    },
+    async guardarTransaccion() {
+      // Validar campos de la tarjeta si el método de pago es "Tarjeta"
+      if (this.transaccionFormulario.metodo_pago === "Tarjeta") {
+        if (
+          !this.transaccionFormulario.numero_tarjeta ||
+          !this.transaccionFormulario.nombre_titular ||
+          !this.transaccionFormulario.fecha_expiracion ||
+          !this.transaccionFormulario.cvv
+        ) {
+          this.mensajeError = "Por favor, complete todos los campos de la tarjeta.";
+          return;
+        }
       }
+
+      try {
+        const metodo = this.esEdicion
+          ? axios.put(`http://localhost:3001/transacciones/${this.transaccionFormulario.id_transaccion}`, this.transaccionFormulario)
+          : axios.post("http://localhost:3001/transacciones", this.transaccionFormulario);
+        await metodo;
+        alert("✅ Transacción guardada correctamente.");
+        this.cargarDatos();
+        this.cerrarModal();
+      } catch (error) {
+        this.mensajeError = error.response?.data?.message || "❌ Error al guardar la transacción.";
+      }
+    },
+    async buscarTransaccion() {
+      if (!this.busquedaId) {
+        alert("Por favor, ingrese un ID para buscar.");
+        return;
+      }
+      try {
+        const response = await axios.get(`http://localhost:3001/transacciones/${this.busquedaId}`);
+        this.transacciones = [response.data];
+      } catch (error) {
+        alert("No se encontró ninguna transacción con el ID proporcionado.");
+        console.error("Error al buscar transacción:", error);
+      }
+    },
+    async eliminarTransaccion(id) {
+      if (confirm("¿Está seguro de que desea eliminar esta transacción?")) {
+        try {
+          await axios.delete(`http://localhost:3001/transacciones/${id}`);
+          alert("Transacción eliminada correctamente.");
+          this.cargarDatos();
+        } catch (error) {
+          alert("Error al eliminar la transacción.");
+          console.error("Error al eliminar transacción:", error);
+        }
+      }
+    },
+    mostrarCamposTarjeta() {
+      this.mostrarCamposTarjetaFlag = this.transaccionFormulario.metodo_pago === "Tarjeta";
     },
     imprimirTransaccion(transaccion) {
       const contenido = `
-        <h2>Detalle de Transacción</h2>
-        <p><strong>ID Transacción:</strong> ${transaccion.idTransaccion}</p>
-        <p><strong>ID Horario:</strong> ${transaccion.idHorario}</p>
-        <p><strong>ID Cliente:</strong> ${transaccion.idCliente}</p>
-        <p><strong>Asiento:</strong> ${transaccion.asiento}</p>
+        <h2>Detalle de la Transacción</h2>
+        <h2>Gracias por viajar con nosotros</h2>
+        <h2>Somos RutaExpress</h2>
+        <p><strong>ID:</strong> ${transaccion.id_transaccion}</p>
+        <p><strong>Horario:</strong> ${transaccion.Horario?.fecha_salida || "No asignado"}</p>
+        <p><strong>Cliente:</strong> ${transaccion.Cliente?.nombre_completo || "Sin cliente"}</p>
+        <p><strong>Bus:</strong> ${transaccion.Bus?.placa || "No asignado"}</p>
+        <p><strong>Ruta:</strong> ${transaccion.Ruta?.origen || "No asignado"}</p>
+        <p><strong>Asiento:</strong> ${transaccion.Asiento?.numero_asiento || "No asignado"}</p>
         <p><strong>Precio:</strong> ${transaccion.precio}</p>
         <p><strong>Estado:</strong> ${transaccion.estado}</p>
-        <p><strong>Fecha de Compra:</strong> ${transaccion.fechaCompra}</p>
-        <p><strong>Método de Pago:</strong> ${transaccion.metodoPago}</p>
+        <p><strong>Fecha Compra:</strong> ${transaccion.fecha_compra}</p>
+        <p><strong>Método Pago:</strong> ${transaccion.metodo_pago}</p>
+        <p><strong>Código Ticket:</strong> ${transaccion.codigo_ticket}</p>
+        <h3>Feliz viaje te desea RutaExpress</h3>
+        <h3>Tel: 95634359, Email: rutaexpress2025@gmail.com</h3>
       `;
-      const ventanaImpresion = window.open("", "_blank");
+
+      const ventanaImpresion = window.open("", "", "width=600,height=600");
       ventanaImpresion.document.write(contenido);
       ventanaImpresion.document.close();
       ventanaImpresion.print();
-    }
-  }
+    },
+  },
+  mounted() {
+    this.cargarDatos();
+  },
 };
 </script>
-  <style scoped>
-  .transaccion-component {
-    max-width: 1200px;
-    margin: 0 auto;
-    padding: 20px;
-    font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-    color: #333;
-  }
-  .header {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    margin-bottom: 15px;
-  }
-  .header h2 {
-    flex: 1;
-    text-align: center;
-    margin: 0;
-  }
-  .search-box {
-    margin-bottom: 10px;
-    text-align: center;
-  }
-  .search-box input {
-    width: 300px;
-    padding: 8px;
-    border: 1px solid #ccc;
-    border-radius: 4px;
-  }
-  .records-control {
-    margin-bottom: 10px;
-    display: flex;
-    justify-content: center;
-    align-items: center;
-    gap: 10px;
-  }
-  .records-control label {
-    font-weight: bold;
-  }
-  .transaccion-table {
-    width: 100%;
-    margin: 0 auto;
-    border-collapse: collapse;
-    table-layout: auto;
-  }
-  .transaccion-table th,
-  .transaccion-table td {
-    border: 1px solid #ddd;
-    padding: 10px;
-    text-align: center;
-    vertical-align: middle;
-  }
-  .transaccion-table th {
-    background-color: #f2f2f2;
-  }
-  .transaccion-table tbody tr:hover {
-    background-color: #e8f4fc;
-  }
-  
-  .actions {
-    display: flex;
-    justify-content: center;
-    align-items: center;
-    gap: 10px;
-    min-width: 150px; /* Fija un ancho mínimo para que se adapte a los demás campos */
-  }
-  .form-view {
-    margin-top: 20px;
-  }
-  .transaccion-form {
-    background: #f9f9f9;
-    padding: 15px;
-    border-radius: 8px;
-    box-shadow: 0 2px 8px rgba(0,0,0,0.1);
-  }
-  .form-group {
-    margin-bottom: 10px;
-  }
-  .form-group label {
-    display: block;
-    font-weight: bold;
-    margin-bottom: 5px;
-  }
-  .small-input {
-    width: 250px;
-    padding: 8px;
-    border: 1px solid #ccc;
-    border-radius: 4px;
-    box-sizing: border-box;
-  }
-  
-  .form-actions {
-    margin-top: 15px;
-    display: flex;
-    gap: 10px;
-  }
-  .btn {
-    padding: 8px 12px;
-    border: none;
-    border-radius: 4px;
-    cursor: pointer;
-    transition: background 0.3s;
-  }
-  .btn-add {
-    background-color: #28a745;
-    color: #fff;
-  }
-  .btn-add:hover {
-    background-color: #218838;
-  }
-  .btn-edit {
-    background-color: #007bff;
-    color: #fff;
-  }
-  .btn-edit:hover {
-    background-color: #0069d9;
-  }
-  .btn-delete {
-    background-color: #dc3545;
-    color: #fff;
-  }
-  .btn-delete:hover {
-    background-color: #c82333;
-  }
-  .btn-save {
-    background-color: #28a745;
-    color: #fff;
-  }
-  .btn-save:hover {
-    background-color: #218838;
-  }
-  .btn-cancel,
-  .btn-close {
-    background-color: #6c757d;
-    color: #fff;
-  }
-  .btn-cancel:hover,
-  .btn-close:hover {
-    background-color: #5a6268;
-  }
-  .modal-overlay {
-    position: fixed;
-    top: 0;
-    left: 0;
-    right: 0;
-    bottom: 0;
-    background: rgba(0,0,0,0.5);
-    display: flex;
-    justify-content: center;
-    align-items: center;
-    z-index: 1000;
-  }
-  .modal {
-    background: #fff;
-    padding: 20px;
-    border-radius: 8px;
-    width: 300px;
-    text-align: center;
-    box-shadow: 0 2px 10px rgba(0,0,0,0.2);
-  }
-  .modal-actions {
-    display: flex;
-    justify-content: space-around;
-    margin-top: 15px;
-  }
-  .modal-success {
-    position: fixed;
-    top: 20px;
-    right: 20px;
-    background: #28a745;
-    color: #fff;
-    padding: 15px 20px;
-    border-radius: 8px;
-    box-shadow: 0 2px 10px rgba(0,0,0,0.2);
-    z-index: 1100;
-    animation: fadeInOut 3s ease forwards;
-  }
 
-  @keyframes fadeInOut {
-    0% { opacity: 0; transform: translateY(-20px); }
-    10% { opacity: 1; transform: translateY(0); }
-    90% { opacity: 1; transform: translateY(0); }
-    100% { opacity: 0; transform: translateY(-20px); }
-  }
-  </style>
+<style scoped>
+/* Estilos básicos para el modal */
+.modal {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  background-color: rgba(0, 0, 0, 0.5);
+  display: flex;
+  justify-content: center;
+  align-items: center;
+}
+
+.modal-content {
+  background-color: white;
+  padding: 20px;
+  border-radius: 8px;
+  width: 90%; /* Ancho adaptable */
+  max-width: 500px; /* Tamaño máximo */
+  transition: all 0.3s ease; /* Animación suave */
+  overflow-y: auto; /* Scroll si el contenido es muy largo */
+  max-height: 90vh; /* Altura máxima */
+}
+
+.modal-content-small {
+  max-width: 400px; /* Tamaño más pequeño */
+}
+
+.error-message {
+  color: red;
+  margin-bottom: 10px;
+}
+
+.button-group {
+  display: flex;
+  justify-content: space-between;
+  margin-top: 20px;
+}
+
+.form-group {
+  margin-bottom: 15px;
+}
+
+.form-group label {
+  display: block;
+  margin-bottom: 5px;
+  font-weight: bold;
+}
+
+.form-group input,
+.form-group select {
+  width: 100%;
+  padding: 8px;
+  border: 1px solid #ccc;
+  border-radius: 4px;
+}
+</style>
