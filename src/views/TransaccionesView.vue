@@ -184,7 +184,7 @@ export default {
       mostrarModal: false,
       esEdicion: false,
       transaccionFormulario: {
-        metodo_pago: "Efectivo", // Valor por defecto
+        metodo_pago: "Efectivo",
         numero_tarjeta: "",
         nombre_titular: "",
         fecha_expiracion: "",
@@ -193,28 +193,41 @@ export default {
       mensajeError: "",
       busquedaId: "",
       itemsPorPagina: "5",
-      mostrarCamposTarjetaFlag: false, // Controla la visibilidad de los campos de la tarjeta
+      mostrarCamposTarjetaFlag: false,
     };
   },
   computed: {
     transaccionesFiltradas() {
+      let transacciones = [...this.transacciones];
+      
+      // Ordenar por ID de forma descendente (opcional)
+      transacciones.sort((a, b) => b.id_transaccion - a.id_transaccion);
+      
       if (this.itemsPorPagina === "todos") {
-        return this.transacciones;
+        return transacciones;
       } else {
-        const cantidad = parseInt(this.itemsPorPagina, 10);
-        return this.transacciones.slice(0, cantidad);
+        return transacciones.slice(0, parseInt(this.itemsPorPagina, 10));
       }
     },
   },
   methods: {
     async cargarDatos() {
       try {
-        this.transacciones = (await axios.get("http://localhost:3001/transacciones")).data;
-        this.horarios = (await axios.get("http://localhost:3001/horarios")).data;
-        this.clientes = (await axios.get("http://localhost:3001/clientes")).data;
-        this.autobuses = (await axios.get("http://localhost:3001/api/autobuses")).data;
-        this.rutas = (await axios.get("http://localhost:3001/rutas")).data;
-        this.asientos = (await axios.get("http://localhost:3001/asientos")).data;
+        const [transacciones, horarios, clientes, autobuses, rutas, asientos] = await Promise.all([
+          axios.get("http://localhost:3001/transacciones"),
+          axios.get("http://localhost:3001/horarios"),
+          axios.get("http://localhost:3001/clientes"),
+          axios.get("http://localhost:3001/api/autobuses"),
+          axios.get("http://localhost:3001/rutas"),
+          axios.get("http://localhost:3001/asientos"),
+        ]);
+
+        this.transacciones = transacciones.data;
+        this.horarios = horarios.data;
+        this.clientes = clientes.data;
+        this.autobuses = autobuses.data;
+        this.rutas = rutas.data;
+        this.asientos = asientos.data;
       } catch (error) {
         console.error("Error al cargar datos:", error);
       }
@@ -222,13 +235,15 @@ export default {
     abrirModal(esEdicion, transaccion = null) {
       this.mostrarModal = true;
       this.esEdicion = esEdicion;
-      this.transaccionFormulario = transaccion ? { ...transaccion } : {
-        metodo_pago: "Efectivo",
-        numero_tarjeta: "",
-        nombre_titular: "",
-        fecha_expiracion: "",
-        cvv: "",
-      };
+      this.transaccionFormulario = transaccion
+        ? { ...transaccion }
+        : {
+            metodo_pago: "Efectivo",
+            numero_tarjeta: "",
+            nombre_titular: "",
+            fecha_expiracion: "",
+            cvv: "",
+          };
       this.mostrarCamposTarjetaFlag = this.transaccionFormulario.metodo_pago === "Tarjeta";
     },
     cerrarModal() {
@@ -236,7 +251,6 @@ export default {
       this.mensajeError = "";
     },
     async guardarTransaccion() {
-      // Validar campos de la tarjeta si el método de pago es "Tarjeta"
       if (this.transaccionFormulario.metodo_pago === "Tarjeta") {
         if (
           !this.transaccionFormulario.numero_tarjeta ||
@@ -250,12 +264,27 @@ export default {
       }
 
       try {
-        const metodo = this.esEdicion
-          ? axios.put(`http://localhost:3001/transacciones/${this.transaccionFormulario.id_transaccion}`, this.transaccionFormulario)
-          : axios.post("http://localhost:3001/transacciones", this.transaccionFormulario);
-        await metodo;
+        let response;
+        if (this.esEdicion) {
+          response = await axios.put(
+            `http://localhost:3001/transacciones/${this.transaccionFormulario.id_transaccion}`,
+            this.transaccionFormulario
+          );
+          const index = this.transacciones.findIndex(
+            (t) => t.id_transaccion === this.transaccionFormulario.id_transaccion
+          );
+          if (index !== -1) {
+            this.transacciones.splice(index, 1, response.data);
+          }
+        } else {
+          response = await axios.post(
+            "http://localhost:3001/transacciones",
+            this.transaccionFormulario
+          );
+          this.transacciones.unshift(response.data); // Agrega al inicio
+        }
+
         alert("✅ Transacción guardada correctamente.");
-        this.cargarDatos();
         this.cerrarModal();
       } catch (error) {
         this.mensajeError = error.response?.data?.message || "❌ Error al guardar la transacción.";
@@ -278,8 +307,8 @@ export default {
       if (confirm("¿Está seguro de que desea eliminar esta transacción?")) {
         try {
           await axios.delete(`http://localhost:3001/transacciones/${id}`);
+          this.transacciones = this.transacciones.filter((t) => t.id_transaccion !== id);
           alert("Transacción eliminada correctamente.");
-          this.cargarDatos();
         } catch (error) {
           alert("Error al eliminar la transacción.");
           console.error("Error al eliminar transacción:", error);
@@ -291,9 +320,9 @@ export default {
     },
     imprimirTransaccion(transaccion) {
       const contenido = `
-        <h2>Detalle de la Transacción</h2>
-        <h2>Gracias por viajar con nosotros</h2>
-        <h2>Somos RutaExpress</h2>
+        <h4>Detalle de la Transacción</h4>
+        <h4>Gracias por viajar con nosotros</h4>
+        <h4>Somos RutaExpress</h4>
         <p><strong>ID:</strong> ${transaccion.id_transaccion}</p>
         <p><strong>Horario:</strong> ${transaccion.Horario?.fecha_salida || "No asignado"}</p>
         <p><strong>Cliente:</strong> ${transaccion.Cliente?.nombre_completo || "Sin cliente"}</p>
@@ -305,8 +334,8 @@ export default {
         <p><strong>Fecha Compra:</strong> ${transaccion.fecha_compra}</p>
         <p><strong>Método Pago:</strong> ${transaccion.metodo_pago}</p>
         <p><strong>Código Ticket:</strong> ${transaccion.codigo_ticket}</p>
-        <h3>Feliz viaje te desea RutaExpress</h3>
-        <h3>Tel: 95634359, Email: rutaexpress2025@gmail.com</h3>
+        <h4>Feliz viaje te desea RutaExpress</h3>
+        <h4>Tel: 95634359, Email: rutaexpress2025@gmail.com</h4>
       `;
 
       const ventanaImpresion = window.open("", "", "width=600,height=600");
@@ -322,7 +351,48 @@ export default {
 </script>
 
 <style scoped>
-/* Estilos básicos para el modal */
+.container {
+  padding: 20px;
+}
+.options-container {
+  margin-bottom: 20px;
+  display: flex;
+  gap: 10px;
+  align-items: center;
+}
+.table-responsive {
+  margin-top: 20px;
+}
+.btn {
+  padding: 8px 12px;
+  border: none;
+  border-radius: 4px;
+  cursor: pointer;
+}
+.btn-primary {
+  background-color: #007bff;
+  color: white;
+}
+.btn-secondary {
+  background-color: #6c757d;
+  color: white;
+}
+.btn-success {
+  background-color: #28a745;
+  color: white;
+}
+.btn-warning {
+  background-color: #ffc107;
+  color: black;
+}
+.btn-danger {
+  background-color: #dc3545;
+  color: white;
+}
+.btn-info {
+  background-color: #17a2b8;
+  color: white;
+}
 .modal {
   position: fixed;
   top: 0;
@@ -333,49 +403,42 @@ export default {
   display: flex;
   justify-content: center;
   align-items: center;
+  z-index: 1000;
 }
-
 .modal-content {
   background-color: white;
   padding: 20px;
   border-radius: 8px;
-  width: 90%; /* Ancho adaptable */
-  max-width: 500px; /* Tamaño máximo */
-  transition: all 0.3s ease; /* Animación suave */
-  overflow-y: auto; /* Scroll si el contenido es muy largo */
-  max-height: 90vh; /* Altura máxima */
+  width: 90%;
+  max-width: 500px;
+  max-height: 90vh;
+  overflow-y: auto;
 }
-
 .modal-content-small {
-  max-width: 400px; /* Tamaño más pequeño */
+  max-width: 400px;
 }
-
 .error-message {
   color: red;
   margin-bottom: 10px;
 }
-
-.button-group {
-  display: flex;
-  justify-content: space-between;
-  margin-top: 20px;
-}
-
 .form-group {
   margin-bottom: 15px;
 }
-
 .form-group label {
   display: block;
   margin-bottom: 5px;
   font-weight: bold;
 }
-
 .form-group input,
 .form-group select {
   width: 100%;
   padding: 8px;
   border: 1px solid #ccc;
   border-radius: 4px;
+}
+.button-group {
+  display: flex;
+  justify-content: space-between;
+  margin-top: 20px;
 }
 </style>

@@ -91,14 +91,17 @@ export default {
   },
   computed: {
     clientesPaginados() {
-      return this.itemsPorPagina === "todos" ? this.clientes : this.clientes.slice(0, Number(this.itemsPorPagina));
+      // Ordenar por ID descendente para que los más nuevos aparezcan primero
+      const clientesOrdenados = [...this.clientes].sort((a, b) => b.id_cliente - a.id_cliente);
+      return this.itemsPorPagina === "todos" ? clientesOrdenados : clientesOrdenados.slice(0, Number(this.itemsPorPagina));
     },
   },
   methods: {
     async cargarClientes() {
       try {
         const response = await axios.get("http://localhost:3001/clientes");
-        this.clientes = response.data;
+        // Ordenar por ID descendente para que los más nuevos aparezcan primero
+        this.clientes = response.data.sort((a, b) => b.id_cliente - a.id_cliente);
       } catch (error) {
         console.error("❌ Error al obtener clientes:", error);
       }
@@ -126,11 +129,14 @@ export default {
         return;
       }
       try {
-        await axios.post("http://localhost:3001/clientes", this.nuevoCliente);
+        const response = await axios.post("http://localhost:3001/clientes", this.nuevoCliente);
         alert("Cliente agregado correctamente");
+        
+        // Agregar el nuevo cliente al principio del array
+        this.clientes.unshift(response.data);
+        
         this.nuevoCliente.nombre_completo = ""; // Limpiar campo después de agregar
         this.cerrarModalAgregar();
-        this.cargarClientes();
       } catch (error) {
         console.error("❌ Error al agregar cliente:", error);
         alert("Error al agregar cliente.");

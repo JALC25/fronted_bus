@@ -114,7 +114,9 @@ export default {
   },
   computed: {
     rutasPaginadas() {
-      return this.itemsPorPagina === "todos" ? this.rutas : this.rutas.slice(0, Number(this.itemsPorPagina));
+      // Ordenar por ID descendente antes de paginar
+      const rutasOrdenadas = [...this.rutas].sort((a, b) => b.id_ruta - a.id_ruta);
+      return this.itemsPorPagina === "todos" ? rutasOrdenadas : rutasOrdenadas.slice(0, Number(this.itemsPorPagina));
     },
   },
   methods: {
@@ -124,7 +126,8 @@ export default {
     async cargarRutas() {
       try {
         const response = await axios.get("http://localhost:3001/rutas");
-        this.rutas = response.data;
+        // Ordenar por ID descendente al cargar
+        this.rutas = response.data.sort((a, b) => b.id_ruta - a.id_ruta);
       } catch (error) {
         alert("Error al cargar las rutas.");
       }
@@ -144,6 +147,7 @@ export default {
       }
       try {
         const response = await axios.get(`http://localhost:3001/rutas/${this.busquedaId}`);
+        // Mostrar solo el resultado de búsqueda (sin ordenar)
         this.rutas = [response.data];
       } catch (error) {
         alert("Ruta no encontrada");
@@ -154,7 +158,7 @@ export default {
       try {
         await axios.delete(`http://localhost:3001/rutas/${id}`);
         alert("Ruta eliminada correctamente");
-        this.cargarRutas();
+        this.cargarRutas(); // Recargar para mantener el orden
       } catch (error) {
         alert("Error al eliminar la ruta.");
       }
@@ -171,7 +175,8 @@ export default {
     },
     async guardarRuta() {
       try {
-        if (!this.rutaFormulario.id_empresa || !this.rutaFormulario.origen || !this.rutaFormulario.destino || !this.rutaFormulario.distancia || !this.rutaFormulario.duracion || !this.rutaFormulario.precio_base) {
+        if (!this.rutaFormulario.id_empresa || !this.rutaFormulario.origen || !this.rutaFormulario.destino || 
+            !this.rutaFormulario.distancia || !this.rutaFormulario.duracion || !this.rutaFormulario.precio_base) {
           alert("Todos los campos son obligatorios");
           return;
         }
@@ -179,13 +184,15 @@ export default {
         if (this.esEdicion) {
           await axios.put(`http://localhost:3001/rutas/${this.rutaFormulario.id_ruta}`, this.rutaFormulario);
           alert("Ruta actualizada correctamente.");
+          this.cargarRutas(); // Recargar para mantener el orden
         } else {
-          await axios.post("http://localhost:3001/rutas", this.rutaFormulario);
+          const response = await axios.post("http://localhost:3001/rutas", this.rutaFormulario);
           alert("Ruta agregada correctamente.");
+          // Agregar la nueva ruta al principio del array (para que aparezca primero)
+          this.rutas.unshift(response.data);
         }
 
         this.cerrarModal();
-        this.cargarRutas();
       } catch (error) {
         alert("Error al guardar la ruta.");
       }

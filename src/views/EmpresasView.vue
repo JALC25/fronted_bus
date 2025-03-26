@@ -30,7 +30,10 @@
         </tr>
       </thead>
       <tbody>
-        <tr v-for="(empresa, index) in empresasPaginadas" :key="empresa.id_empresa" @mouseover="filaSeleccionada = index" @mouseleave="filaSeleccionada = null" :class="{ 'fila-seleccionada': filaSeleccionada === index }">
+        <tr v-for="(empresa, index) in empresasPaginadas" :key="empresa.id_empresa" 
+            @mouseover="filaSeleccionada = index" 
+            @mouseleave="filaSeleccionada = null" 
+            :class="{ 'fila-seleccionada': filaSeleccionada === index }">
           <td>{{ empresa.id_empresa }}</td>
           <td>{{ empresa.nombre_empresa }}</td>
           <td>{{ empresa.direccion }}</td>
@@ -127,22 +130,28 @@ export default {
   },
   computed: {
     empresasPaginadas() {
-      return this.itemsPorPagina === "todos" ? this.empresas : this.empresas.slice(0, Number(this.itemsPorPagina));
+      // Ordenar por ID descendente (más reciente primero)
+      const empresasOrdenadas = [...this.empresas].sort((a, b) => b.id_empresa - a.id_empresa);
+      return this.itemsPorPagina === "todos" ? empresasOrdenadas : empresasOrdenadas.slice(0, Number(this.itemsPorPagina));
     },
   },
   methods: {
     async cargarEmpresas() {
       try {
         const response = await axios.get("http://localhost:3001/empresas");
-        this.empresas = response.data;
+        // Ordenar por ID descendente
+        this.empresas = response.data.sort((a, b) => b.id_empresa - a.id_empresa);
       } catch (error) {
-        console.error("❌ Error al obtener empresas:", error);
+        console.error("Error al obtener empresas:", error);
+        alert("Error al cargar las empresas");
       }
     },
+    
     mostrarTodas() {
       this.itemsPorPagina = "todos";
       this.cargarEmpresas();
     },
+    
     async buscarEmpresa() {
       if (!this.busquedaId) return alert("Ingrese un ID válido");
       try {
@@ -152,45 +161,86 @@ export default {
         alert("Empresa no encontrada");
       }
     },
+    
     async agregarEmpresa() {
       try {
-        await axios.post("http://localhost:3001/empresas", this.nuevaEmpresa);
+        // Validación básica
+        if (!this.nuevaEmpresa.nombre_empresa || !this.nuevaEmpresa.telefono_contacto) {
+          alert("Nombre y teléfono son campos obligatorios");
+          return;
+        }
+        
+        // Enviar datos al servidor
+        const response = await axios.post("http://localhost:3001/empresas", this.nuevaEmpresa);
+        
+        // Agregar la nueva empresa al principio del array
+        this.empresas.unshift(response.data);
+        
         alert("Empresa agregada correctamente");
         this.cerrarModalAgregar();
-        this.cargarEmpresas();
       } catch (error) {
-        alert(error.response.data.error);
+        console.error("Error al agregar empresa:", error);
+        alert(error.response?.data?.error || "Error al agregar la empresa");
       }
     },
+    
     editarEmpresa(empresa) {
       this.empresaEditando = { ...empresa };
     },
+    
     async guardarEdicion() {
       try {
-        await axios.put(`http://localhost:3001/empresas/${this.empresaEditando.id_empresa}`, this.empresaEditando);
+        // Validación básica
+        if (!this.empresaEditando.nombre_empresa || !this.empresaEditando.telefono_contacto) {
+          alert("Nombre y teléfono son campos obligatorios");
+          return;
+        }
+        
+        // Enviar cambios al servidor
+        await axios.put(
+          `http://localhost:3001/empresas/${this.empresaEditando.id_empresa}`, 
+          this.empresaEditando
+        );
+        
+        // Actualizar localmente
+        const index = this.empresas.findIndex(e => e.id_empresa === this.empresaEditando.id_empresa);
+        if (index !== -1) {
+          this.empresas.splice(index, 1, this.empresaEditando);
+        }
+        
         alert("Empresa actualizada correctamente");
         this.empresaEditando = null;
-        this.cargarEmpresas();
       } catch (error) {
-        alert(error.response.data.error);
+        console.error("Error al editar empresa:", error);
+        alert(error.response?.data?.error || "Error al actualizar la empresa");
       }
     },
+    
     async eliminarEmpresa(id) {
       if (!confirm("¿Estás seguro de eliminar esta empresa?")) return;
       try {
         await axios.delete(`http://localhost:3001/empresas/${id}`);
+        
+        // Eliminar localmente
+        this.empresas = this.empresas.filter(e => e.id_empresa !== id);
+        
         alert("Empresa eliminada correctamente");
-        this.cargarEmpresas();
       } catch (error) {
-        alert(error.response.data.error);
+        console.error("Error al eliminar empresa:", error);
+        alert(error.response?.data?.error || "Error al eliminar la empresa");
       }
     },
+    
     validarNombre(event) {
       event.target.value = event.target.value.replace(/[^a-zA-ZÁÉÍÓÚáéíóúñÑ\s]/g, "");
+      this.nuevaEmpresa.nombre_empresa = event.target.value;
     },
+    
     validarTelefono(event) {
       event.target.value = event.target.value.replace(/\D/g, "").slice(0, 8);
+      this.nuevaEmpresa.telefono_contacto = event.target.value;
     },
+    
     cerrarModalAgregar() {
       this.mostrarModalAgregar = false;
       this.nuevaEmpresa = { nombre_empresa: "", direccion: "", telefono_contacto: "", email_contacto: "" };
@@ -201,7 +251,6 @@ export default {
   }
 };
 </script>
-
 <style>
 .container {
   max-width: 900px;

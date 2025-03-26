@@ -52,7 +52,7 @@
         <div class="form-layout">
           <div class="form-group">
             <label>Empresa:</label>
-            <select v-model="autobusFormulario.id_empresa">
+            <select v-model="autobusFormulario.id_empresa" required>
               <option disabled value="">Seleccione una empresa</option>
               <option v-for="empresa in empresas" :key="empresa.id_empresa" :value="empresa.id_empresa">
                 {{ empresa.nombre_empresa }}
@@ -72,7 +72,7 @@
 
           <div class="form-group">
             <label>Placa:</label>
-            <input v-model="autobusFormulario.placa" type="text" required />
+            <input v-model="autobusFormulario.placa" type="text" required @input="formatearPlaca" />
           </div>
 
           <div class="form-group">
@@ -103,32 +103,46 @@ export default {
       mostrarModal: false,
       esEdicion: false,
       filaSeleccionada: null,
-      autobusFormulario: { id_empresa: "", id_chofer: "", placa: "", capacidad: "" },
+      autobusFormulario: { 
+        id_empresa: "", 
+        id_chofer: "", 
+        placa: "", 
+        capacidad: 30 
+      },
       itemsPorPagina: "5",
     };
   },
   computed: {
     autobusesPaginados() {
-      return this.itemsPorPagina === "todos" ? this.autobuses : this.autobuses.slice(0, Number(this.itemsPorPagina));
+      // Ordenar por ID descendente para que los más nuevos aparezcan primero
+      const autobusesOrdenados = [...this.autobuses].sort((a, b) => b.id_bus - a.id_bus);
+      return this.itemsPorPagina === "todos" ? autobusesOrdenados : autobusesOrdenados.slice(0, Number(this.itemsPorPagina));
     },
   },
   methods: {
+    formatearPlaca() {
+      this.autobusFormulario.placa = this.autobusFormulario.placa.toUpperCase().replace(/\s/g, '');
+    },
     async cargarAutobuses() {
       try {
         const response = await axios.get("http://localhost:3001/api/autobuses");
-        this.autobuses = response.data || [];
+        this.autobuses = response.data.sort((a, b) => b.id_bus - a.id_bus) || [];
       } catch (error) {
+        console.error("Error al cargar autobuses:", error);
         alert("Error al cargar los autobuses.");
       }
     },
     async cargarEmpresasYChoferes() {
       try {
-        const empresasRes = await axios.get("http://localhost:3001/empresas");
+        const [empresasRes, choferesRes] = await Promise.all([
+          axios.get("http://localhost:3001/empresas"),
+          axios.get("http://localhost:3001/choferes")
+        ]);
+        
         this.empresas = empresasRes.data || [];
-
-        const choferesRes = await axios.get("http://localhost:3001/choferes");
         this.choferes = choferesRes.data || [];
       } catch (error) {
+        console.error("Error al cargar empresas y choferes:", error);
         alert("Error al cargar empresas y choferes.");
       }
     },
@@ -137,8 +151,9 @@ export default {
       return empresa ? empresa.nombre_empresa : "Desconocido";
     },
     obtenerNombreChofer(idChofer) {
+      if (!idChofer) return "Sin asignar";
       const chofer = this.choferes.find(ch => ch.id_chofer === idChofer);
-      return chofer ? chofer.nombre : "Sin asignar";
+      return chofer ? chofer.nombre : "Chofer no encontrado";
     },
     async buscarAutobus() {
       if (!this.busquedaId) {
@@ -149,6 +164,7 @@ export default {
         const response = await axios.get(`http://localhost:3001/api/autobuses/${this.busquedaId}`);
         this.autobuses = [response.data];
       } catch (error) {
+        console.error("Error al buscar autobús:", error);
         alert("Autobús no encontrado");
       }
     },
@@ -156,14 +172,21 @@ export default {
       if (!confirm("¿Estás seguro de eliminar este autobús?")) return;
       try {
         await axios.delete(`http://localhost:3001/api/autobuses/${id}`);
+        // Eliminar el autobús del array local sin recargar
+        this.autobuses = this.autobuses.filter(autobus => autobus.id_bus !== id);
         alert("Autobús eliminado correctamente");
-        this.cargarAutobuses();
       } catch (error) {
+        console.error("Error al eliminar autobús:", error);
         alert("Error al eliminar el autobús.");
       }
     },
     abrirModalAgregar() {
-      this.autobusFormulario = { id_empresa: "", id_chofer: "", placa: "", capacidad: "" };
+      this.autobusFormulario = { 
+        id_empresa: "", 
+        id_chofer: "", 
+        placa: "", 
+        capacidad: 30 
+      };
       this.esEdicion = false;
       this.mostrarModal = true;
     },
@@ -174,15 +197,34 @@ export default {
     },
     async guardarAutobus() {
       try {
-        if (this.esEdicion) {
-          await axios.put(`http://localhost:3001/api/autobuses/${this.autobusFormulario.id_bus}`, this.autobusFormulario);
-        } else {
-          await axios.post("http://localhost:3001/api/autobuses", this.autobusFormulario);
+        if (!this.autobusFormulario.id_empresa || !this.autobusFormulario.placa || !this.autobusFormulario.capacidad) {
+          alert("Empresa, placa y capacidad son campos obligatorios");
+          return;
         }
-        alert("Operación exitosa");
+
+        if (this.esEdicion) {
+          const response = await axios.put(
+            `http://localhost:3001/api/autobuses/${this.autobusFormulario.id_bus}`, 
+            this.autobusFormulario
+          );
+          // Actualizar el autobús en el array local
+          this.autobuses = this.autobuses.map(autobus => 
+            autobus.id_bus === this.autobusFormulario.id_bus ? response.data : autobus
+          );
+          alert("Autobús actualizado correctamente");
+        } else {
+          const response = await axios.post(
+            "http://localhost:3001/api/autobuses", 
+            this.autobusFormulario
+          );
+          // Agregar el nuevo autobús al principio del array local
+          this.autobuses.unshift(response.data);
+          alert("Autobús agregado correctamente");
+        }
+        
         this.cerrarModal();
-        this.cargarAutobuses();
       } catch (error) {
+        console.error("Error al guardar autobús:", error);
         alert("Error al guardar el autobús.");
       }
     },
@@ -196,8 +238,6 @@ export default {
   }
 };
 </script>
-
-
 
 <style>
 .botones-acciones {

@@ -8,6 +8,7 @@
       <input id="busqueda" v-model="busquedaId" type="number" placeholder="Ingrese ID" />
       <button @click="buscarUsuario">Buscar</button>
       <button @click="cargarUsuarios">Mostrar Todos</button>
+      <button @click="mostrar5Usuarios">Mostrar 5</button>
     </div>
 
     <!-- Botón Agregar Usuario -->
@@ -21,20 +22,20 @@
           <th>Nombre</th>
           <th>Correo</th>
           <th>Teléfono</th>
-          <th>Contraseña</th>
+          <th>Rol</th>
           <th>Acciones</th>
         </tr>
       </thead>
       <tbody>
-        <tr v-for="usuario in usuarios" :key="usuario.id_usuario">
+        <tr v-for="usuario in usuariosMostrados" :key="usuario.id_usuario">
           <td>{{ usuario.id_usuario }}</td>
           <td>{{ usuario.nombre }}</td>
           <td>{{ usuario.correo_electronico }}</td>
           <td>{{ usuario.telefono }}</td>
-          <td>********</td> <!-- Oculta la contraseña -->
-          <td>
-            <button @click="editarUsuario(usuario)">Editar</button>
-            <button @click="eliminarUsuario(usuario.id_usuario)">Eliminar</button>
+          <td>{{ usuario.id_rol === 1 ? 'Administrador' : 'Usuario' }}</td>
+          <td class="vertical-actions">
+            <button class="btn-edit" @click="editarUsuario(usuario)">Editar</button>
+            <button class="btn-delete" @click="eliminarUsuario(usuario.id_usuario)">Eliminar</button>
           </td>
         </tr>
       </tbody>
@@ -83,24 +84,35 @@ export default {
   data() {
     return {
       usuarios: [],
-      usuarioEditando: null,
+      usuariosMostrados: [],
       busquedaId: "",
       mostrarModalAgregar: false,
-      nuevoUsuario: { nombre: "", correo_electronico: "", telefono: "", contraseña: "", id_rol: "2" },
+      nuevoUsuario: { 
+        nombre: "", 
+        correo_electronico: "", 
+        telefono: "", 
+        contraseña: "", 
+        id_rol: "2" 
+      },
+      usuarioEditando: null
     };
   },
   methods: {
-    // Cargar usuarios al inicio
     async cargarUsuarios() {
       try {
         const response = await axios.get("http://localhost:3001/usuarios");
-        this.usuarios = response.data;
+        // Ordenar por ID descendente para que los más nuevos aparezcan primero
+        this.usuarios = response.data.sort((a, b) => b.id_usuario - a.id_usuario);
+        this.usuariosMostrados = [...this.usuarios];
       } catch (error) {
         console.error("❌ Error al obtener usuarios:", error);
       }
     },
-
-    // Buscar usuario por ID
+    
+    mostrar5Usuarios() {
+      this.usuariosMostrados = this.usuarios.slice(0, 5);
+    },
+    
     async buscarUsuario() {
       if (!this.busquedaId) {
         alert("Ingrese un ID válido");
@@ -108,45 +120,51 @@ export default {
       }
       try {
         const response = await axios.get(`http://localhost:3001/usuarios/${this.busquedaId}`);
-        this.usuarios = [response.data];
+        this.usuariosMostrados = [response.data];
       } catch (error) {
         console.error("❌ Error al buscar usuario:", error);
         alert("Usuario no encontrado");
       }
     },
-
-    // Agregar un usuario
+    
     async agregarUsuario() {
       if (!this.nuevoUsuario.nombre || !this.nuevoUsuario.correo_electronico || !this.nuevoUsuario.contraseña) {
         alert("Todos los campos son obligatorios");
         return;
       }
       try {
-        await axios.post("http://localhost:3001/usuarios", this.nuevoUsuario);
+        const response = await axios.post("http://localhost:3001/usuarios", this.nuevoUsuario);
         alert("Usuario agregado correctamente");
         this.mostrarModalAgregar = false;
-        this.cargarUsuarios();
+        
+        // Agregar el nuevo usuario al principio del array
+        this.usuarios.unshift(response.data);
+        this.usuariosMostrados = [...this.usuarios];
+        
+        // Resetear el formulario
+        this.nuevoUsuario = { 
+          nombre: "", 
+          correo_electronico: "", 
+          telefono: "", 
+          contraseña: "", 
+          id_rol: "2" 
+        };
       } catch (error) {
         console.error("❌ Error al agregar usuario:", error);
         alert("Error al agregar usuario.");
       }
     },
-
-    // Editar usuario
+    
     editarUsuario(usuario) {
-      this.usuarioEditando = { ...usuario, contraseña: "" }; // Nueva contraseña opcional
+      this.usuarioEditando = { ...usuario, contraseña: "" };
     },
-
-    // Guardar edición de usuario
+    
     async guardarEdicion() {
       try {
         const datosActualizados = { ...this.usuarioEditando };
-
-        // Si la contraseña está vacía, no enviarla
         if (!datosActualizados.contraseña) {
           delete datosActualizados.contraseña;
         }
-
         await axios.put(`http://localhost:3001/usuarios/${this.usuarioEditando.id_usuario}`, datosActualizados);
         alert("Usuario actualizado correctamente");
         this.usuarioEditando = null;
@@ -156,8 +174,7 @@ export default {
         alert("Error al actualizar usuario.");
       }
     },
-
-    // Eliminar usuario
+    
     async eliminarUsuario(id) {
       if (!confirm("¿Estás seguro de eliminar este usuario?")) return;
       try {
@@ -175,8 +192,6 @@ export default {
   }
 };
 </script>
-
-
 
 <style>
 /* Estilos Generales */
@@ -197,21 +212,40 @@ h1 {
   gap: 10px;
   margin-bottom: 20px;
 }
+.search-container label {
+  font-weight: 500;
+}
 .search-container input {
   width: 150px;
   padding: 5px;
   border: 1px solid #ccc;
   border-radius: 4px;
 }
+.search-container button {
+  padding: 5px 10px;
+  border: 1px solid #1e40af;
+  border-radius: 4px;
+  background: white;
+  color: #1e40af;
+  cursor: pointer;
+}
+.search-container button:hover {
+  background: #1e40af;
+  color: white;
+}
 
 /* Botón Agregar */
 .btn-add {
-  background: #28a745;
+  background: #1e40af;
   color: white;
   padding: 6px 12px;
   border: none;
   border-radius: 4px;
   cursor: pointer;
+  margin-bottom: 20px;
+}
+.btn-add:hover {
+  background: #1e3a8a;
 }
 
 /* Tabla */
@@ -223,7 +257,38 @@ table {
 th, td {
   border: 1px solid #ddd;
   padding: 8px;
-  text-align: center;
+  text-align: left;
+}
+th {
+  background-color: #f1f5f9;
+  color: #1e40af;
+}
+
+/* Acciones verticales */
+.vertical-actions {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+.vertical-actions button {
+  padding: 5px 10px;
+  border: none;
+  border-radius: 4px;
+  cursor: pointer;
+}
+.vertical-actions button:first-child {
+  background: #ffc107;
+  color: white;
+}
+.vertical-actions button:first-child:hover {
+  background: #2563eb;
+}
+.vertical-actions button:last-child {
+  background: #ef4444;
+  color: white;
+}
+.vertical-actions button:last-child:hover {
+  background: #dc2626;
 }
 
 /* Modal */
@@ -242,6 +307,34 @@ th, td {
   background: white;
   padding: 20px;
   border-radius: 8px;
-  text-align: center;
+  width: 400px;
+  max-width: 90%;
+}
+.modal-content h2 {
+  color: #1e40af;
+  margin-top: 0;
+}
+.modal-content input,
+.modal-content select {
+  width: 100%;
+  padding: 8px;
+  margin-bottom: 10px;
+  border: 1px solid #ddd;
+  border-radius: 4px;
+}
+.modal-content button {
+  padding: 8px 15px;
+  margin-right: 10px;
+  border: none;
+  border-radius: 4px;
+  cursor: pointer;
+}
+.modal-content button:first-child {
+  background: #e2e8f0;
+  color: #333;
+}
+.modal-content button:last-child {
+  background: #1e40af;
+  color: white;
 }
 </style>

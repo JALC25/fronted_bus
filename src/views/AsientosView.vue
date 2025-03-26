@@ -54,7 +54,7 @@
           <select v-model="asientoFormulario.id_horario" required>
             <option disabled value="">Seleccione un horario</option>
             <option v-for="horario in horarios" :key="horario.id_horario" :value="horario.id_horario">
-              {{ horario.fecha_salida }}
+              {{ formatFecha(horario.fecha_salida) }}
             </option>
           </select>
         </div>
@@ -64,7 +64,7 @@
           <select v-model="asientoFormulario.id_bus" required>
             <option disabled value="">Seleccione un autobús</option>
             <option v-for="autobus in autobuses" :key="autobus.id_bus" :value="autobus.id_bus">
-              {{ autobus.placa }}
+              {{ autobus.placa }} ({{ autobus.marca }})
             </option>
           </select>
         </div>
@@ -113,40 +113,64 @@ export default {
   },
   computed: {
     asientosPaginados() {
-      return this.itemsPorPagina === "todos" ? this.asientos : this.asientos.slice(0, Number(this.itemsPorPagina));
+      // Ordenar por ID descendente (más reciente primero)
+      const asientosOrdenados = [...this.asientos].sort((a, b) => b.id_asiento - a.id_asiento);
+      return this.itemsPorPagina === "todos" ? asientosOrdenados : asientosOrdenados.slice(0, Number(this.itemsPorPagina));
     },
   },
   methods: {
+    formatFecha(fecha) {
+      if (!fecha) return 'No definido';
+      const date = new Date(fecha);
+      return date.toLocaleString('es-ES', {
+        year: 'numeric',
+        month: '2-digit',
+        day: '2-digit',
+        hour: '2-digit',
+        minute: '2-digit'
+      });
+    },
+    
     async cargarAsientos() {
       try {
         const response = await axios.get("http://localhost:3001/asientos");
-        this.asientos = response.data;
+        // Ordenar por ID descendente
+        this.asientos = response.data.sort((a, b) => b.id_asiento - a.id_asiento);
       } catch (error) {
-        alert("Error al cargar los asientos.");
+        console.error("Error al cargar asientos:", error);
+        alert("Error al cargar los asientos");
       }
     },
+    
     async mostrarTodosLosAsientos() {
-      this.busquedaId = ""; // Limpia la búsqueda
+      this.busquedaId = "";
       await this.cargarAsientos();
     },
+    
     async cargarHorariosYAutobuses() {
       try {
-        const horariosRes = await axios.get("http://localhost:3001/horarios");
-        const autobusesRes = await axios.get("http://localhost:3001/api/autobuses");
+        const [horariosRes, autobusesRes] = await Promise.all([
+          axios.get("http://localhost:3001/horarios"),
+          axios.get("http://localhost:3001/api/autobuses")
+        ]);
         this.horarios = horariosRes.data;
         this.autobuses = autobusesRes.data;
       } catch (error) {
-        alert("Error al cargar horarios y autobuses.");
+        console.error("Error al cargar horarios y autobuses:", error);
+        alert("Error al cargar horarios y autobuses");
       }
     },
+    
     obtenerFechaHorario(id_horario) {
       const horario = this.horarios.find(h => h.id_horario === id_horario);
-      return horario ? horario.fecha_salida : "Desconocido";
+      return horario ? this.formatFecha(horario.fecha_salida) : "Desconocido";
     },
+    
     obtenerPlacaAutobus(id_bus) {
       const autobus = this.autobuses.find(a => a.id_bus === id_bus);
       return autobus ? autobus.placa : "Desconocido";
     },
+    
     async buscarAsiento() {
       if (!this.busquedaId) {
         alert("Ingrese un ID válido");
@@ -159,16 +183,20 @@ export default {
         alert("Asiento no encontrado");
       }
     },
+    
     async eliminarAsiento(id) {
       if (!confirm("¿Estás seguro de eliminar este asiento?")) return;
       try {
         await axios.delete(`http://localhost:3001/asientos/${id}`);
+        // Eliminar localmente sin recargar
+        this.asientos = this.asientos.filter(a => a.id_asiento !== id);
         alert("Asiento eliminado correctamente");
-        this.cargarAsientos();
       } catch (error) {
-        alert("Error al eliminar asiento.");
+        console.error("Error al eliminar asiento:", error);
+        alert("Error al eliminar asiento");
       }
     },
+    
     abrirModalAgregar() {
       this.errorMensaje = "";
       this.asientoFormulario = { id_horario: "", id_bus: "", numero_asiento: "", estado: "Disponible" };
@@ -176,32 +204,62 @@ export default {
       this.mostrarModal = true;
       this.cargarHorariosYAutobuses();
     },
+    
     editarAsiento(asiento) {
       this.errorMensaje = "";
       this.asientoFormulario = { ...asiento };
       this.esEdicion = true;
       this.mostrarModal = true;
+      this.cargarHorariosYAutobuses();
     },
+    
     async guardarAsiento() {
       this.errorMensaje = "";
+      
+      // Validación de campos obligatorios
       if (!this.asientoFormulario.id_horario || !this.asientoFormulario.id_bus || !this.asientoFormulario.numero_asiento) {
-        this.errorMensaje = "Todos los campos son obligatorios.";
+        this.errorMensaje = "Todos los campos son obligatorios";
         return;
       }
+      
       try {
         if (this.esEdicion) {
-          await axios.put(`http://localhost:3001/asientos/${this.asientoFormulario.id_asiento}`, this.asientoFormulario);
-          alert("Asiento actualizado correctamente.");
+          // Edición de asiento existente
+          await axios.put(
+            `http://localhost:3001/asientos/${this.asientoFormulario.id_asiento}`,
+            this.asientoFormulario
+          );
+          
+          // Actualizar localmente
+          const index = this.asientos.findIndex(a => a.id_asiento === this.asientoFormulario.id_asiento);
+          if (index !== -1) {
+            this.asientos.splice(index, 1, this.asientoFormulario);
+          }
+          
+          alert("Asiento actualizado correctamente");
         } else {
-          await axios.post("http://localhost:3001/asientos", this.asientoFormulario);
-          alert("Asiento agregado correctamente.");
+          // Creación de nuevo asiento
+          const response = await axios.post(
+            "http://localhost:3001/asientos",
+            this.asientoFormulario
+          );
+          
+          // Obtener datos completos del nuevo asiento
+          const asientoCompleto = await axios.get(`http://localhost:3001/asientos/${response.data.id_asiento}`);
+          
+          // Agregar al principio del array (para que aparezca primero)
+          this.asientos.unshift(asientoCompleto.data);
+          
+          alert("Asiento agregado correctamente");
         }
+        
         this.cerrarModal();
-        this.cargarAsientos();
       } catch (error) {
-        this.errorMensaje = error.response.data.error || "Error al guardar el asiento.";
+        console.error("Error al guardar asiento:", error);
+        this.errorMensaje = error.response?.data?.error || "Error al guardar el asiento";
       }
     },
+    
     cerrarModal() {
       this.mostrarModal = false;
     }
